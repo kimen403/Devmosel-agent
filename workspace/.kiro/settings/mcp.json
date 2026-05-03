@@ -2,7 +2,7 @@
   "mcpServers": {
     "github": {
       "command": "uvx",
-      "args": ["mcp-server-github"],
+      "args": ["--from", "github-mcp-server", "github-mcp-cli"],
       "env": {
         "GITHUB_TOKEN": "${GITHUB_TOKEN}"
       },
@@ -11,7 +11,7 @@
     },
     "supabase": {
       "command": "uvx", 
-      "args": ["mcp-server-supabase"],
+      "args": ["supabase-mcp-server"],
       "env": {
         "SUPABASE_URL": "${SUPABASE_URL}",
         "SUPABASE_SERVICE_ROLE_KEY": "${SUPABASE_SERVICE_ROLE_KEY}"
@@ -21,11 +21,11 @@
     },
     "vercel": {
       "command": "uvx",
-      "args": ["mcp-server-vercel"],
+      "args": ["mcp-vercel-server"],
       "env": {
         "VERCEL_TOKEN": "${VERCEL_TOKEN}"
       },
-      "disabled": false,
+      "disabled": true,
       "autoApprove": []
     }
   }
