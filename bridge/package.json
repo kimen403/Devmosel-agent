@@ -1,0 +1,24 @@
+{
+  "name": "devmosel-bridge",
+  "version": "1.0.0",
+  "description": "Node.js Bridge connecting Telegram Bot API with 5 parallel Kiro CLI agents",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "telegram",
+    "bot",
+    "kiro",
+    "agent",
+    "bridge"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "node-telegram-bot-api": "^0.66.0",
+    "dotenv": "^16.4.5",
+    "winston": "^3.15.0"
+  }
+}
