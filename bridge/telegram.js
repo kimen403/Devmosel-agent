@@ -123,8 +123,9 @@ class TelegramAdapter {
    * 
    * @param {string|number} chatId - Telegram chat ID
    * @param {string} text - Message text to send
+   * @param {object} options - Additional options (parse_mode, reply_markup, etc.)
    */
-  async sendMessage(chatId, text) {
+  async sendMessage(chatId, text, options = {}) {
     if (!this.bot) {
       throw new Error('Telegram Bot is not initialized. Call start() first.');
     }
@@ -142,7 +143,7 @@ class TelegramAdapter {
     try {
       // If message fits in one chunk, send it directly
       if (text.length <= MAX_MESSAGE_LENGTH) {
-        await this.bot.sendMessage(chatId, text);
+        await this.bot.sendMessage(chatId, text, options);
         return;
       }
 
@@ -153,7 +154,11 @@ class TelegramAdapter {
       for (let i = 0; i < chunks.length; i++) {
         const chunk = chunks[i];
         const prefix = chunks.length > 1 ? `[${i + 1}/${chunks.length}] ` : '';
-        await this.bot.sendMessage(chatId, prefix + chunk);
+        
+        // Only apply options to the first chunk to avoid duplicate keyboards
+        const chunkOptions = i === 0 ? options : { parse_mode: options.parse_mode };
+        
+        await this.bot.sendMessage(chatId, prefix + chunk, chunkOptions);
         
         // Small delay between chunks to avoid rate limiting
         if (i < chunks.length - 1) {
@@ -292,8 +297,42 @@ class TelegramAdapter {
     const args = parts.slice(1);
 
     switch (command) {
+      case '/start':
+      case '/help':
+        return {
+          type: 'help',
+          context
+        };
+      
+      case '/menu':
+        return {
+          type: 'menu',
+          context
+        };
+      
       case '/agent':
         return this._parseAgentCommand(args, context);
+      
+      // Shortcut commands for agents
+      case '/be':
+      case '/backend':
+        return this._parseShortcutCommand('backend', args, context);
+      
+      case '/fe':
+      case '/frontend':
+        return this._parseShortcutCommand('frontend', args, context);
+      
+      case '/test':
+      case '/testing':
+        return this._parseShortcutCommand('testing', args, context);
+      
+      case '/ops':
+      case '/devops':
+        return this._parseShortcutCommand('devops', args, context);
+      
+      case '/review':
+      case '/reviewer':
+        return this._parseShortcutCommand('reviewer', args, context);
       
       case '/all':
         return this._parseAllCommand(args, context);
@@ -314,10 +353,33 @@ class TelegramAdapter {
       default:
         return {
           type: 'error',
-          message: `Unknown command: ${command}. Available commands: /agent, /all, /agents, /status, /logs, /cancel`,
+          message: `❌ Perintah tidak dikenal: ${command}\n\nKetik /help untuk melihat daftar perintah yang tersedia.`,
           context
         };
     }
+  }
+
+  /**
+   * Parse shortcut agent commands like /be, /fe, etc.
+   * @private
+   */
+  _parseShortcutCommand(agentName, args, context) {
+    if (args.length === 0) {
+      return {
+        type: 'error',
+        message: `📝 Penggunaan: /${agentName === 'backend' ? 'be' : agentName === 'frontend' ? 'fe' : agentName === 'testing' ? 'test' : agentName === 'devops' ? 'ops' : 'review'} <prompt>\n\nContoh: /${agentName === 'backend' ? 'be' : agentName === 'frontend' ? 'fe' : agentName === 'testing' ? 'test' : agentName === 'devops' ? 'ops' : 'review'} buat API untuk login user`,
+        context
+      };
+    }
+
+    const prompt = args.join(' ');
+
+    return {
+      type: 'agent',
+      agentName,
+      prompt,
+      context
+    };
   }
 
   /**
@@ -331,7 +393,7 @@ class TelegramAdapter {
     if (args.length < 2) {
       return {
         type: 'error',
-        message: 'Usage: /agent <name> <prompt>\nValid agent names: ' + validAgents.join(', '),
+        message: `📝 Penggunaan: /agent <nama> <prompt>\n\n🤖 Agent yang tersedia:\n• backend - Pengembangan backend dan API\n• frontend - Pengembangan frontend dan UI\n• testing - Testing dan quality assurance\n• devops - Deployment dan infrastructure\n• reviewer - Code review dan best practices\n\n💡 Tip: Gunakan shortcut /be, /fe, /test, /ops, /review`,
         context
       };
     }
@@ -343,7 +405,7 @@ class TelegramAdapter {
     if (!validAgents.includes(agentName)) {
       return {
         type: 'error',
-        message: `Unrecognized agent name: ${agentName}\nValid agent names: ${validAgents.join(', ')}`,
+        message: `❌ Agent tidak dikenal: ${agentName}\n\n🤖 Agent yang tersedia:\n• backend - Pengembangan backend dan API\n• frontend - Pengembangan frontend dan UI\n• testing - Testing dan quality assurance\n• devops - Deployment dan infrastructure\n• reviewer - Code review dan best practices`,
         context
       };
     }
@@ -365,7 +427,7 @@ class TelegramAdapter {
     if (args.length === 0) {
       return {
         type: 'error',
-        message: 'Usage: /all <prompt>',
+        message: '📝 Penggunaan: /all <prompt>\n\nContoh: /all review semua kode untuk keamanan',
         context
       };
     }
@@ -390,7 +452,7 @@ class TelegramAdapter {
     if (args.length === 0) {
       return {
         type: 'error',
-        message: 'Usage: /logs <name>\nValid agent names: ' + validAgents.join(', '),
+        message: `📝 Penggunaan: /logs <nama>\n\n🤖 Agent yang tersedia:\n• ${validAgents.join('\n• ')}\n\nContoh: /logs backend`,
         context
       };
     }
@@ -401,7 +463,7 @@ class TelegramAdapter {
     if (!validAgents.includes(agentName)) {
       return {
         type: 'error',
-        message: `Unrecognized agent name: ${agentName}\nValid agent names: ${validAgents.join(', ')}`,
+        message: `❌ Agent tidak dikenal: ${agentName}\n\n🤖 Agent yang tersedia:\n• ${validAgents.join('\n• ')}`,
         context
       };
     }
@@ -424,7 +486,7 @@ class TelegramAdapter {
     if (args.length === 0) {
       return {
         type: 'error',
-        message: 'Usage: /cancel <name>\nValid agent names: ' + validAgents.join(', '),
+        message: `📝 Penggunaan: /cancel <nama>\n\n🤖 Agent yang tersedia:\n• ${validAgents.join('\n• ')}\n\nContoh: /cancel backend`,
         context
       };
     }
@@ -435,7 +497,7 @@ class TelegramAdapter {
     if (!validAgents.includes(agentName)) {
       return {
         type: 'error',
-        message: `Unrecognized agent name: ${agentName}\nValid agent names: ${validAgents.join(', ')}`,
+        message: `❌ Agent tidak dikenal: ${agentName}\n\n🤖 Agent yang tersedia:\n• ${validAgents.join('\n• ')}`,
         context
       };
     }
@@ -504,6 +566,25 @@ class TelegramAdapter {
       }
     });
 
+    // Set up callback query handler for inline keyboards
+    this.bot.on('callback_query', async (callbackQuery) => {
+      try {
+        // Authenticate callback query
+        if (!this.authenticateMessage(callbackQuery.message)) {
+          await this.bot.answerCallbackQuery(callbackQuery.id);
+          return;
+        }
+
+        await this.handleCallbackQuery(callbackQuery);
+      } catch (error) {
+        console.error('Error handling callback query:', error);
+        await this.bot.answerCallbackQuery(callbackQuery.id, {
+          text: `❌ Error: ${error.message}`,
+          show_alert: true
+        });
+      }
+    });
+
     console.log('Command handlers set up successfully');
   }
 
@@ -515,6 +596,14 @@ class TelegramAdapter {
    */
   async handleCommand(command) {
     switch (command.type) {
+      case 'help':
+        await this.handleHelpCommand(command);
+        break;
+      
+      case 'menu':
+        await this.handleMenuCommand(command);
+        break;
+      
       case 'agent':
         await this.handleAgentCommand(command);
         break;
@@ -539,8 +628,295 @@ class TelegramAdapter {
       default:
         await this.sendMessage(
           command.context.chatId,
-          `Unknown command type: ${command.type}`
+          `❌ Tipe perintah tidak dikenal: ${command.type}`
         );
+    }
+  }
+
+  /**
+   * Handle /help and /start commands
+   * @private
+   */
+  async handleHelpCommand(command) {
+    const { context } = command;
+
+    const helpMessage = `🤖 *Telegram Kiro Bot - Panduan Penggunaan*
+
+*📋 PERINTAH UTAMA:*
+
+*🎯 Kirim ke Agent Tertentu:*
+• \`/agent <nama> <prompt>\` - Kirim perintah ke agent tertentu
+• \`/be <prompt>\` - Shortcut untuk backend agent
+• \`/fe <prompt>\` - Shortcut untuk frontend agent  
+• \`/test <prompt>\` - Shortcut untuk testing agent
+• \`/ops <prompt>\` - Shortcut untuk devops agent
+• \`/review <prompt>\` - Shortcut untuk reviewer agent
+
+*📢 Broadcast:*
+• \`/all <prompt>\` - Kirim ke semua 5 agent sekaligus
+
+*📊 Monitoring:*
+• \`/agents\` atau \`/status\` - Lihat status semua agent
+• \`/logs <nama>\` - Lihat log agent tertentu
+
+*⚙️ Kontrol:*
+• \`/cancel <nama>\` - Batalkan task yang sedang berjalan
+• \`/menu\` - Tampilkan menu interaktif
+• \`/help\` - Tampilkan panduan ini
+
+*🤖 AGENT YANG TERSEDIA:*
+• *backend* - Pengembangan backend, API, database
+• *frontend* - Pengembangan frontend, UI/UX
+• *testing* - Testing, quality assurance
+• *devops* - Deployment, infrastructure, CI/CD
+• *reviewer* - Code review, best practices
+
+*💡 CONTOH PENGGUNAAN:*
+• \`/be buat API untuk login user\`
+• \`/fe buat komponen navbar responsive\`
+• \`/all review kode untuk keamanan\`
+• \`implementasi JWT auth\` (otomatis ke backend)
+
+*📝 CATATAN:*
+• Pesan tanpa command otomatis dikirim ke backend agent
+• Gunakan /menu untuk interface yang lebih mudah`;
+
+    await this.sendMessage(context.chatId, helpMessage, { parse_mode: 'Markdown' });
+  }
+
+  /**
+   * Handle /menu command with inline keyboard
+   * @private
+   */
+  async handleMenuCommand(command) {
+    const { context } = command;
+
+    const menuMessage = `🤖 *Kiro Bot - Menu Utama*
+
+Pilih agent atau aksi yang ingin Anda gunakan:`;
+
+    const keyboard = {
+      inline_keyboard: [
+        [
+          { text: '🔧 Backend', callback_data: 'select_backend' },
+          { text: '🎨 Frontend', callback_data: 'select_frontend' }
+        ],
+        [
+          { text: '🧪 Testing', callback_data: 'select_testing' },
+          { text: '⚙️ DevOps', callback_data: 'select_devops' }
+        ],
+        [
+          { text: '👁️ Reviewer', callback_data: 'select_reviewer' },
+          { text: '📢 Broadcast All', callback_data: 'select_all' }
+        ],
+        [
+          { text: '📊 Status Agent', callback_data: 'show_status' },
+          { text: '📋 Logs', callback_data: 'show_logs_menu' }
+        ],
+        [
+          { text: '❌ Cancel Tasks', callback_data: 'cancel_menu' },
+          { text: '❓ Help', callback_data: 'show_help' }
+        ]
+      ]
+    };
+
+    try {
+      await this.bot.sendMessage(context.chatId, menuMessage, {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard
+      });
+    } catch (error) {
+      console.error('Error sending menu:', error);
+      await this.sendMessage(context.chatId, menuMessage);
+    }
+  }
+
+  /**
+   * Handle callback queries from inline keyboards
+   * @private
+   */
+  async handleCallbackQuery(callbackQuery) {
+    const chatId = callbackQuery.message.chat.id;
+    const userId = callbackQuery.from.id.toString();
+    const data = callbackQuery.data;
+    const messageId = callbackQuery.message.message_id;
+
+    // Answer the callback query first
+    await this.bot.answerCallbackQuery(callbackQuery.id);
+
+    const context = {
+      chatId,
+      userId,
+      messageId: messageId.toString(),
+      timestamp: Date.now()
+    };
+
+    switch (data) {
+      case 'select_backend':
+      case 'select_frontend':
+      case 'select_testing':
+      case 'select_devops':
+      case 'select_reviewer':
+        await this.handleAgentSelection(data.replace('select_', ''), context);
+        break;
+      
+      case 'select_all':
+        await this.handleBroadcastSelection(context);
+        break;
+      
+      case 'show_status':
+        await this.handleStatusCommand({ context });
+        break;
+      
+      case 'show_logs_menu':
+        await this.handleLogsMenuSelection(context);
+        break;
+      
+      case 'cancel_menu':
+        await this.handleCancelMenuSelection(context);
+        break;
+      
+      case 'show_help':
+        await this.handleHelpCommand({ context });
+        break;
+      
+      default:
+        // Handle logs selection (logs_backend, logs_frontend, etc.)
+        if (data.startsWith('logs_')) {
+          const agentName = data.replace('logs_', '');
+          await this.handleLogsCommand({ agentName, context });
+        }
+        // Handle cancel selection (cancel_backend, cancel_frontend, etc.)
+        else if (data.startsWith('cancel_')) {
+          const agentName = data.replace('cancel_', '');
+          await this.handleCancelCommand({ agentName, context });
+        }
+        else {
+          await this.sendMessage(chatId, `❌ Callback tidak dikenal: ${data}`);
+        }
+    }
+  }
+
+  /**
+   * Handle agent selection from menu
+   * @private
+   */
+  async handleAgentSelection(agentName, context) {
+    const agentEmojis = {
+      backend: '🔧',
+      frontend: '🎨',
+      testing: '🧪',
+      devops: '⚙️',
+      reviewer: '👁️'
+    };
+
+    const agentDescriptions = {
+      backend: 'Pengembangan backend, API, dan database',
+      frontend: 'Pengembangan frontend, UI/UX, dan komponen',
+      testing: 'Testing, quality assurance, dan debugging',
+      devops: 'Deployment, infrastructure, dan CI/CD',
+      reviewer: 'Code review dan best practices'
+    };
+
+    const message = `${agentEmojis[agentName]} *${agentName.toUpperCase()} Agent Dipilih*
+
+${agentDescriptions[agentName]}
+
+💬 Silakan kirim pesan Anda untuk agent ini, atau gunakan:
+• \`/${agentName === 'backend' ? 'be' : agentName === 'frontend' ? 'fe' : agentName === 'testing' ? 'test' : agentName === 'devops' ? 'ops' : 'review'} <prompt>\`
+
+📝 Contoh: \`/${agentName === 'backend' ? 'be' : agentName === 'frontend' ? 'fe' : agentName === 'testing' ? 'test' : agentName === 'devops' ? 'ops' : 'review'} buat komponen login\``;
+
+    await this.sendMessage(context.chatId, message, { parse_mode: 'Markdown' });
+  }
+
+  /**
+   * Handle broadcast selection from menu
+   * @private
+   */
+  async handleBroadcastSelection(context) {
+    const message = `📢 *Broadcast ke Semua Agent*
+
+Pesan Anda akan dikirim ke semua 5 agent secara bersamaan:
+• 🔧 Backend
+• 🎨 Frontend  
+• 🧪 Testing
+• ⚙️ DevOps
+• 👁️ Reviewer
+
+💬 Silakan kirim pesan Anda, atau gunakan:
+• \`/all <prompt>\`
+
+📝 Contoh: \`/all review kode untuk keamanan\``;
+
+    await this.sendMessage(context.chatId, message, { parse_mode: 'Markdown' });
+  }
+
+  /**
+   * Handle logs menu selection
+   * @private
+   */
+  async handleLogsMenuSelection(context) {
+    const message = `📋 *Pilih Agent untuk Melihat Logs*`;
+
+    const keyboard = {
+      inline_keyboard: [
+        [
+          { text: '🔧 Backend', callback_data: 'logs_backend' },
+          { text: '🎨 Frontend', callback_data: 'logs_frontend' }
+        ],
+        [
+          { text: '🧪 Testing', callback_data: 'logs_testing' },
+          { text: '⚙️ DevOps', callback_data: 'logs_devops' }
+        ],
+        [
+          { text: '👁️ Reviewer', callback_data: 'logs_reviewer' }
+        ]
+      ]
+    };
+
+    try {
+      await this.bot.sendMessage(context.chatId, message, {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard
+      });
+    } catch (error) {
+      console.error('Error sending logs menu:', error);
+      await this.sendMessage(context.chatId, message);
+    }
+  }
+
+  /**
+   * Handle cancel menu selection
+   * @private
+   */
+  async handleCancelMenuSelection(context) {
+    const message = `❌ *Pilih Agent untuk Membatalkan Task*`;
+
+    const keyboard = {
+      inline_keyboard: [
+        [
+          { text: '🔧 Backend', callback_data: 'cancel_backend' },
+          { text: '🎨 Frontend', callback_data: 'cancel_frontend' }
+        ],
+        [
+          { text: '🧪 Testing', callback_data: 'cancel_testing' },
+          { text: '⚙️ DevOps', callback_data: 'cancel_devops' }
+        ],
+        [
+          { text: '👁️ Reviewer', callback_data: 'cancel_reviewer' }
+        ]
+      ]
+    };
+
+    try {
+      await this.bot.sendMessage(context.chatId, message, {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard
+      });
+    } catch (error) {
+      console.error('Error sending cancel menu:', error);
+      await this.sendMessage(context.chatId, message);
     }
   }
 
@@ -618,21 +994,38 @@ class TelegramAdapter {
 
         // Format and send summary
         const durationSec = Math.round(result.duration / 1000);
-        let summary = `✅ Broadcast complete in ${durationSec} seconds\n\n`;
-        summary += `Successful: ${result.successful.length}/${this.agentManager.agentNames.length}\n`;
+        let summary = `✅ *Broadcast Selesai* dalam ${durationSec} detik\n\n`;
+        summary += `📊 *Hasil:* ${result.successful.length}/${this.agentManager.agentNames.length} berhasil\n\n`;
         
         if (result.successful.length > 0) {
-          summary += `✅ ${result.successful.join(', ')}\n`;
+          summary += `✅ *Berhasil:*\n`;
+          result.successful.forEach(agent => {
+            const emoji = {
+              backend: '🔧',
+              frontend: '🎨', 
+              testing: '🧪',
+              devops: '⚙️',
+              reviewer: '👁️'
+            }[agent] || '🤖';
+            summary += `  ${emoji} ${agent}\n`;
+          });
         }
         
         if (result.failed.length > 0) {
-          summary += `\n❌ Failed:\n`;
+          summary += `\n❌ *Gagal:*\n`;
           result.failed.forEach(f => {
-            summary += `  • ${f.agent}: ${f.error}\n`;
+            const emoji = {
+              backend: '🔧',
+              frontend: '🎨',
+              testing: '🧪', 
+              devops: '⚙️',
+              reviewer: '👁️'
+            }[f.agent] || '🤖';
+            summary += `  ${emoji} ${f.agent}: ${f.error}\n`;
           });
         }
 
-        await this.sendMessage(context.chatId, summary);
+        await this.sendMessage(context.chatId, summary, { parse_mode: 'Markdown' });
       } finally {
         clearInterval(typingInterval);
       }
@@ -659,7 +1052,15 @@ class TelegramAdapter {
       const agentStates = this.agentManager.getAllAgentStates();
 
       // Format status message
-      let statusMessage = '📊 Agent Status:\n\n';
+      let statusMessage = '📊 *Status Agent Kiro Bot*\n\n';
+
+      const agentEmojis = {
+        backend: '🔧',
+        frontend: '🎨',
+        testing: '🧪',
+        devops: '⚙️',
+        reviewer: '👁️'
+      };
 
       for (const [agentName, state] of agentStates) {
         const stateEmoji = {
@@ -668,18 +1069,27 @@ class TelegramAdapter {
           'unavailable': '❌'
         }[state.state] || '❓';
 
-        statusMessage += `${stateEmoji} ${agentName}: ${state.state}`;
+        const agentEmoji = agentEmojis[agentName] || '🤖';
+        
+        statusMessage += `${stateEmoji} ${agentEmoji} *${agentName.toUpperCase()}*: `;
 
-        // Add current task info if busy
-        if (state.state === 'busy' && state.currentTask) {
+        if (state.state === 'idle') {
+          statusMessage += 'Siap menerima tugas';
+        } else if (state.state === 'busy' && state.currentTask) {
           const elapsed = Math.round((Date.now() - state.currentTask.startTime) / 1000);
-          statusMessage += ` (${elapsed}s)`;
+          statusMessage += `Sedang bekerja (${elapsed}s)`;
+        } else if (state.state === 'unavailable') {
+          statusMessage += 'Tidak tersedia';
+        } else {
+          statusMessage += state.state;
         }
 
         statusMessage += '\n';
       }
 
-      await this.sendMessage(context.chatId, statusMessage);
+      statusMessage += '\n💡 Gunakan /menu untuk akses cepat atau /help untuk panduan';
+
+      await this.sendMessage(context.chatId, statusMessage, { parse_mode: 'Markdown' });
     } catch (error) {
       console.error('Error querying agent states:', error);
       await this.sendMessage(
@@ -704,18 +1114,32 @@ class TelegramAdapter {
       if (logEntries.length === 0) {
         await this.sendMessage(
           context.chatId,
-          `📋 No logs found for agent: ${agentName}`
+          `📋 Tidak ada log untuk agent: *${agentName}*`,
+          { parse_mode: 'Markdown' }
         );
         return;
       }
 
+      const agentEmojis = {
+        backend: '🔧',
+        frontend: '🎨',
+        testing: '🧪',
+        devops: '⚙️',
+        reviewer: '👁️'
+      };
+
       // Format log entries
-      let logsMessage = `📋 Last ${logEntries.length} log entries for ${agentName}:\n\n`;
+      let logsMessage = `📋 *Log ${agentEmojis[agentName] || '🤖'} ${agentName.toUpperCase()}*\n`;
+      logsMessage += `_${logEntries.length} entri terakhir_\n\n`;
 
       logEntries.forEach((entry, index) => {
         const timestamp = new Date(entry.ts).toLocaleString('id-ID', {
           timeZone: 'Asia/Jakarta',
-          hour12: false
+          hour12: false,
+          day: '2-digit',
+          month: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit'
         });
 
         const levelEmoji = {
@@ -724,29 +1148,37 @@ class TelegramAdapter {
           'error': '❌'
         }[entry.level] || '📝';
 
-        logsMessage += `${levelEmoji} [${timestamp}] ${entry.type}`;
+        logsMessage += `${levelEmoji} \`${timestamp}\` `;
 
         // Add relevant details based on type
         if (entry.type === 'prompt' && entry.text) {
-          const preview = entry.text.length > 50 
-            ? entry.text.substring(0, 50) + '...' 
+          const preview = entry.text.length > 40 
+            ? entry.text.substring(0, 40) + '...' 
             : entry.text;
-          logsMessage += `: "${preview}"`;
+          logsMessage += `*Prompt:* "${preview}"`;
         } else if (entry.type === 'tool_call' && entry.tool) {
-          logsMessage += `: ${entry.tool}`;
+          logsMessage += `*Tool:* ${entry.tool}`;
           if (entry.path) {
             logsMessage += ` (${entry.path})`;
           }
         } else if (entry.type === 'response_complete' && entry.duration_ms) {
-          logsMessage += `: ${Math.round(entry.duration_ms / 1000)}s`;
+          logsMessage += `*Selesai:* ${Math.round(entry.duration_ms / 1000)}s`;
         } else if (entry.type === 'agent_crash' && entry.message) {
-          logsMessage += `: ${entry.message}`;
+          logsMessage += `*Crash:* ${entry.message}`;
+        } else {
+          logsMessage += `*${entry.type}*`;
+          if (entry.message) {
+            const preview = entry.message.length > 30 
+              ? entry.message.substring(0, 30) + '...' 
+              : entry.message;
+            logsMessage += `: ${preview}`;
+          }
         }
 
         logsMessage += '\n';
       });
 
-      await this.sendMessage(context.chatId, logsMessage);
+      await this.sendMessage(context.chatId, logsMessage, { parse_mode: 'Markdown' });
     } catch (error) {
       console.error(`Error querying logs for agent ${agentName}:`, error);
       await this.sendMessage(
@@ -768,11 +1200,22 @@ class TelegramAdapter {
       // Check agent state first
       const agentState = this.agentManager.getAgentState(agentName);
 
+      const agentEmojis = {
+        backend: '🔧',
+        frontend: '🎨',
+        testing: '🧪',
+        devops: '⚙️',
+        reviewer: '👁️'
+      };
+
+      const emoji = agentEmojis[agentName] || '🤖';
+
       // If agent is idle, inform user (Requirement 4.9)
       if (agentState === 'idle') {
         await this.sendMessage(
           context.chatId,
-          `ℹ️ Agent ${agentName} has no running task to cancel`
+          `ℹ️ ${emoji} Agent *${agentName}* tidak memiliki task yang sedang berjalan`,
+          { parse_mode: 'Markdown' }
         );
         return;
       }
@@ -782,14 +1225,15 @@ class TelegramAdapter {
 
       await this.sendMessage(
         context.chatId,
-        `✅ Task cancelled for agent: ${agentName}`
+        `✅ ${emoji} Task dibatalkan untuk agent: *${agentName}*`,
+        { parse_mode: 'Markdown' }
       );
     } catch (error) {
       // Handle errors from Agent_Manager
       console.error(`Error cancelling task for agent ${agentName}:`, error);
       await this.sendMessage(
         context.chatId,
-        `❌ Error cancelling task: ${error.message}`
+        `❌ Error membatalkan task: ${error.message}`
       );
     }
   }
